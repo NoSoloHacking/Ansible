@@ -1,0 +1,36 @@
+---
+# Inicio del playbook para buscar, descargar y registrar actualizaciones sin instalarlas ni reiniciar el euipo
+- name: Buscar y registrar actualizaciones de Windows  # Nombre del playbook en español
+  hosts: windows                      # Apunta a los hosts en el grupo "windows"
+  gather_facts: yes                  # Recolecta información del sistema antes de ejecutar
+  tasks:
+    - name: Crear directorio de logs si no existe  # Tarea para asegurarme de que el directorio de logs exista
+      win_file:                      # Módulo para manejar archivos y directorios en Windows
+        path: C:\log                # Ruta donde se creará el directorio de logs, asegúrate tener acceso e escritura en esa unicación o escoge otra
+        state: directory            # Estado: debe existir como directorio
+        # Fin de tarea: Directorio de logs creado o verificado
+    - name: Buscar y descargar actualizaciones sin instalarlas  # Tarea para descargar actualizaciones
+      ansible.windows.win_updates:     # Utilizo el módulo de actualizaciones de Windows
+        state: downloaded             # Estado: solo descarga las actualizaciones
+      register: update_result         # Guardo el resultado en la variable "update_result"
+        # Fin de tarea: Actualizaciones descargadas y resultado almacenado
+    - name: Registrar resultados de actualizaciones (con actualizaciones)  # Tarea para registrar actualizaciones descargadas
+      win_shell: |                   # Ejecuto un script de PowerShell en Windows
+        # Defino el archivo de log y preparo el resultado de actualizaciones
+        $logFile = "C:\log\log.txt"  # Variable que define la ruta del archivo de log
+        $updateResult = "{{ update_result }}"  # Asigno el resultado de la tarea anterior a una variable
+        # Si se encontraron actualizaciones, itero y registro cada una
+        if ($updateResult.updates.Count -gt 0) {
+          foreach ($update in $updateResult.updates) {
+            Add-Content -Path $logFile -Value ("Update Title: " + $update.title + " - KB: " + $update.kb_article_ids)
+          }
+        } else {
+          Add-Content -Path $logFile -Value "No updates found or downloaded."
+        }
+      when: update_result is defined and update_result.updates | length > 0  # Ejecuto esta tarea solo si se descargaron actualizaciones
+        # Fin de tarea: Resultados registrados en el log
+    - name: Registrar mensaje de ausencia de actualizaciones  # Tarea para registrar que no se encontraron actualizaciones
+      win_shell: |                   # Ejecuto un script de PowerShell en Windows
+        Add-Content -Path C:\log\log.txt -Value "No updates found or downloaded."
+      when: update_result is not defined or update_result.updates | length == 0  # Ejecuto si no hay actualizaciones
+        # Fin de tarea: Mensaje de log para ausencia de actualizaciones
